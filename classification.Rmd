@@ -1,0 +1,199 @@
+Classification 
+========================================================
+
+이 예제에서는 트리모형을 중심으로 코드 소개를 한다. 
+따라서 아래의 패키지를 설치할 필요가 있다. 
+
+* [party][party]
+* [rpart][rpart]
+* [randomForest][randomforest]
+
+```
+install.packages(c("party", "rpart", "randomForest"))
+```
+
+설명도 역시 같은 순서로 진행된다. 
+
+## party ##
+
+Conditional Inference Tree를 이용한 분류 
+
+
+```{r party, message=FALSE}
+library(party)
+
+str(iris)
+
+ind <- sample(2,nrow(iris), replace=TRUE, prob=c(0.7,0.3))
+
+#split test, train set
+trainData<-iris[ind==1,]
+testData<-iris[ind==2,]
+
+#variable relation
+myFormula <- Species ~ Sepal.Length + Sepal.Width + Petal.Length + Petal.Width
+
+iris_ctree<-ctree(myFormula,data=trainData)
+
+table(predict(iris_ctree),trainData$Species)
+
+print(iris_ctree)
+```
+
+
+Conditional Inference Tree 
+
+```{r fig.width=7, fig.height=6}
+plot(iris_ctree)
+
+plot(iris_ctree,type="simple")
+```
+
+
+테스트 데이터 예측 
+
+```{r 3}
+testPred <- predict(iris_ctree, newdata=testData)
+
+table(testPred, testData$Species)
+
+```
+
+
+## [rpart][rpart]를 활용한 예측 ##
+
+전처리, EDA 
+
+```{r rpart, message=FALSE}
+data("bodyfat",package="mboost")
+
+dim(bodyfat)
+
+attributes(bodyfat)
+
+bodyfat[1:5,]
+
+set.seed(123)
+
+# divide to train, test sets
+ind <- sample(2, nrow(bodyfat), replace=TRUE, prob=c(0.7,0.3))
+bodyfat.train<-bodyfat[ind==1,]
+bodyfat.test<-bodyfat[ind==2,]
+
+
+library(rpart)
+
+myFormula <- DEXfat ~ age + waistcirc + hipcirc + elbowbreadth + kneebreadth
+
+bodyfat_rpart <- rpart(myFormula, data=bodyfat.train,
+                       control=rpart.control(minsplit=10))
+
+```
+
+트리 플로팅
+
+```{r fig.width=7, fig.height=6}
+plot(bodyfat_rpart)
+
+text(bodyfat_rpart,use.n=TRUE)
+```
+
+
+
+```{r fig.width=7, fig.height=6}
+#Gives a visual representation of the cross-validation results in an rpart object.
+plotcp(bodyfat_rpart)
+
+```
+
+에러를 최소화 하는 최적 CP값을 구한다. 
+
+```{r cp}
+opt <- which.min(bodyfat_rpart$cptable[,"xerror"])
+
+cp<-bodyfat_rpart$cptable[opt,"CP"]
+
+bodyfat_prune<-prune(bodyfat_rpart,cp=cp)
+
+print(bodyfat_prune)
+
+DEXfat_pred<-predict(bodyfat_prune,newdata=bodyfat.test)
+
+xlim<-range(bodyfat$DEXfat)
+
+```
+
+예측값과 정답을 플로팅 한다. 
+
+```{r fig.width=7, fig.height=6}
+plot(DEXfat_pred ~ DEXfat,data=bodyfat.test,xlab="Observed",
+     ylab="Predicted",ylim=xlim,xlim=xlim)
+
+abline(a=0,b=1)
+```
+
+
+## [randomForest][randomforest] 를 활용한 예측 
+
+
+전처리 - 학습셋과 테스트셋 분류 
+
+모델 생성 
+
+```{r, message=FALSE}
+
+ind<-sample(2,nrow(iris),replace=TRUE,prob=c(0.7,0.3))
+
+trainData<-iris[ind==1,]
+
+testData<-iris[ind==2,]
+
+
+library(randomForest)
+
+rf<-randomForest(Species~.,data=trainData,ntree=100,proximity=TRUE)
+
+table(predict(rf),trainData$Species)
+
+print(rf)
+
+attributes(rf)
+
+(rf$err.rate)
+```
+
+변수 중요도 플로팅- 변수 선택을 위함 
+
+```{r fig.width=7, fig.height=6}
+plot(rf)
+
+importance(rf)
+
+varImpPlot(rf)
+
+```
+
+1. 예측값 출력 
+1. Margin 플로팅 
+
+`정답 클래스를 예측한 트리의 비율 - 오답 클래스를 예측한 트리의 비율`
+
+```{r, message=FALSE}
+irisPred <- predict(rf, newdata = testData)
+
+table(irisPred, testData$Species)
+
+plot(margin(rf, trainData$Species))
+
+```
+
+
+## Reference ##
+
+* [R Data Mining](http://www.rdatamining.com/)
+
+
+
+[party]:http://cran.r-project.org/web/packages/party/index.html
+[rpart]:http://cran.r-project.org/web/packages/rpart/index.html
+[randomforest]:http://cran.r-project.org/web/packages/randomForest/index.html

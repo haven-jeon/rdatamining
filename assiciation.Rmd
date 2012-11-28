@@ -1,0 +1,123 @@
+Assiciation rule
+========================================================
+
+연관룰
+
+* 지지도(support) - 룰이 함께 출혀할 확률 -  P(A,B)
+* 신뢰도(confidence) - A룰이 출현할 때 B룰이 출현할 확률 -  P(B|A)
+* 향상도(lift) - B룰이 출현할 확률과 신뢰도의 비율  - P(B|A)/P(B)
+
+
+
+## making rules 
+
+```{r init, message=FALSE}
+load(url("http://dl.dropbox.com/u/8686172/titanic.raw.rdata"))
+
+
+str(titanic.raw)
+
+library(arules)
+
+rules <- apriori(titanic.raw)
+
+inspect(rules)
+```
+
+You can also embed plots, for example:
+
+```{r Survived, message=FALSE}
+# rules with rhs containing "Survived" only
+rules <- apriori(titanic.raw,
+                 parameter = list(minlen=2, supp=0.005, conf=0.8),
+                 appearance = list(rhs=c("Survived=No", "Survived=Yes"),
+                                   default="lhs"),
+                 control = list(verbose=F))
+
+
+rules.sorted <- sort(rules, by="lift")
+inspect(rules.sorted)
+```
+
+---
+
+## Pruning Redundant Rules
+
+이미 0.8의 신뢰도를 가지고 출력한 결과이며, 상위룰과 하위룰과의 차이는 거의 없거나 하위룰이 조금 하락된 값을 가지고 있을 것이다. 이들 하위룰에 대한 제거 작업을 한다.  
+
+* 향상도를 기준으로 내림차순 정리 
+
+
+
+```{r prun, message=FALSE}
+# find redundant rules
+subset.matrix <- is.subset(rules.sorted, rules.sorted)
+subset.matrix[lower.tri(subset.matrix, diag=T)] <- NA
+
+redundant <- colSums(subset.matrix, na.rm=T) >= 1
+which(redundant)
+# remove redundant rules
+rules.pruned <- rules.sorted[!redundant]
+inspect(rules.pruned)
+```
+
+
+## Interpretation rules 
+
+우리가 아래 룰을 상대적으로 얼마나 신뢰할 수 있는지 살펴볼 필요가 있다. 
+
+`{Class=2nd, Age=Child} => {Sur-vived=Yes}`
+
+이등석 아이들은 모두 생존했다는 정보를 알 수 있을 뿐이고 다른 객석 등급의 아이들의 생존과는 상대적인 비교를 할 수 없다. 이들에 대한 정보는 이미 지지도와 신뢰도를 기반으로 필터링 된 결과들이여서 이들을 살펴볼 수 있는 해석 과정이 필요하다. 
+
+
+```{r interpretation, message=FALSE}
+
+rules <- apriori(titanic.raw,
+  parameter = list(minlen=3, supp=0.002, conf=0.2),
+  appearance = list(rhs=c("Survived=Yes"),
+  lhs=c("Class=1st", "Class=2nd", "Class=3rd",
+  "Age=Child", "Age=Adult"),
+  default="none"),
+  control = list(verbose=F))
+rules.sorted <- sort(rules, by="confidence")
+inspect(rules.sorted)
+
+```
+
+
+
+## Vislualization 
+
+scatter plot 
+
+```{r visualization1, fig.height=8, fig.width=8, message=FALSE}
+library(arulesViz)
+plot(rules)
+```
+
+
+ballon plot
+
+```{r visualization2, fig.height=8, fig.width=8, message=FALSE}
+plot(rules,method="grouped")
+```
+
+Graph plot
+
+```{r visualization3, fig.height=8, fig.width=8, message=FALSE}
+plot(rules,method="graph")
+```
+
+Graph plot for items
+
+
+```{r visualization4, fig.height=8, fig.width=8, message=FALSE}
+plot(rules, method="graph", control=list(type="items"))
+```
+
+
+## Reference 
+
+* [R Data Mining](http://www.rdatamining.com/)
+

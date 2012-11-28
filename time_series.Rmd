@@ -1,0 +1,176 @@
+Time Series Analysis 
+========================================================
+
+**Airpassengers** 데이터를 이용한 시계열 분석/예측 
+
+
+## 시계열 분석 
+
+* ts명령어를 이용한 time series data 객체 생성 
+* 자기상관 
+* 부분자기상관
+* 주파수 분석 
+* 차분을 통한 트랜드 제거 
+
+아래 플로팅을 통해 알 수 있는 사실 
+* acf 결과로 불규칙 시계열임을 알 수 있다. 
+* 로그 차분한 acf를 통해 MA(1) 모델 가능성을 볼 수 있음 
+* 스펙트럼을 통해 저주파에서 약간 높은 경향이 있음을 알 수 있다. 
+
+
+```{r analysis,fig.width=8,fig.height=6}
+apts <- ts(AirPassengers, frequency = 12)
+
+plot(apts)
+
+acf(apts)
+
+pacf(apts)
+
+spectrum(apts)
+
+acf(diff(log(AirPassengers)))
+
+pacf(diff(log(AirPassengers)))
+```
+
+## 장기 추세 제거
+
+* 추세 제거 - 회귀곡선 이용 
+* 추세 제거 - 차분을 이용 
+
+```{r trend, fig.width=8, fig.height=6}
+library(zoo)
+m <- lm(coredata(apts) ~ index(apts))
+
+apts.eltr <- ts(resid(m), index(apts))
+
+plot(apts.eltr)
+
+plot(diff(log(apts)))
+
+apts.diff <- diff(log(apts))
+```
+
+
+## 추세(차분), 계절요인(이동평균), 순환변동, 불규칙 변동 추출
+
+* 계절변동
+* 모든요인 
+
+```{r decompose, fig.width=8, fig.height=6, warning=FALSE}
+f <- decompose(apts)
+
+attributes(f)
+
+
+plot(f$figure, type="b", xaxt="n", xlab="")
+
+monthNames <- months(ISOdate(2011,1:12,1))
+
+axis(1, at=1:12, labels=monthNames, las=2)
+
+plot(f)
+```
+
+## 시계열을 이용한 예측 
+
+* 일반적으로 ARIMA보다 지수평활법(exponential smoothing)방법이 좀더 robust하다고 알려져 있다.(간단하고 실무에서 많이 쓰이나 과학적인 증명이 되어 있지 않다.) 
+* ARIMA는 차수를 구하기 위한 과정이 중요하며, 어떤 모델인지 자동으로 선택되는 것 보다는 직접 데이터를 확인하면서 구하는게 더 나을 수 있음 
+* 어찌보면 시계열 예측 모델링은 과학이 아니라 경험적인 기술의 분야임
+
+
+```{r predict, fig.width=10, fig.height=8, message=FALSE, warning=FALSE}
+library(forecast)
+apts.arima <- auto.arima(apts)
+
+summary(apts.arima)
+
+fore <- predict(apts.arima, n.ahead=24)
+
+U <- fore$pred + 2*fore$se
+L <- fore$pred - 2*fore$se
+
+
+apts.smoothing <- HoltWinters(apts, seasonal="mul")
+fore2 <- predict(apts.smoothing,n.ahead=24)
+
+
+ts.plot(apts, fore$pred, U, L, fore2,col=c(1,2,4,4,6), lty = c(1,1,2,2,3))
+legend("topleft", c("Actual", "ARIMA", "ARIMA Error Bounds (95% Confidence)", "exponential smoothing"),col=c(1,2,4,6), lty=c(1,1,2,3))
+
+```
+
+
+### 분산을 일정하는 하는 변수 변환을 한 경우 
+
+* 추정 모수의 개수는 늘어났지만 AIC나 BIC 값이 이전보다 크게 줄어든 것을 볼 수 있다. 
+
+
+```{r predict2, fig.width=10, fig.height=8, message=FALSE, warning=FALSE}
+apts.log <- log(apts)
+apts.log.arima <- auto.arima(apts.log)
+
+summary(apts.log.arima)
+
+fore <- predict(apts.log.arima, n.ahead=24)
+
+U <- fore$pred + 2*fore$se
+L <- fore$pred - 2*fore$se
+
+
+apts.smoothing <- HoltWinters(apts.log, seasonal="mul")
+fore2 <- predict(apts.smoothing,n.ahead=24)
+
+
+ts.plot(exp(apts.log), exp(fore$pred), exp(U), exp(L), exp(fore2),col=c(1,2,4,4,6), lty = c(1,1,2,2,3))
+legend("topleft", c("Actual", "ARIMA", "ARIMA Error Bounds (95% Confidence)", "exponential smoothing"),col=c(1,2,4,6), lty=c(1,1,2,3))
+
+```
+
+지표를 좀더 살펴 보면 아래와 같다. 
+
+`sma1`, `sar2`의 경우 추정 모수에 비해 `s.e`가 너무 크며 모수가 0을 포함하고 있는 것을 알 수 있다. 따라서 이를 제거한 결과를 모델링해 볼 필요가 있다. 
+
+```{r predict3, fig.width=10, fig.height=8, message=FALSE, warning=FALSE}
+apts.log.arima <- arima(apts.log, order=c(0,1,1), seasonal=list(order=c(0,1,1), period=12))
+
+
+summary(apts.log.arima)
+
+fore <- predict(apts.log.arima, n.ahead=24)
+
+U <- fore$pred + 2*fore$se
+L <- fore$pred - 2*fore$se
+
+
+apts.smoothing <- HoltWinters(apts.log, seasonal="mul")
+fore2 <- predict(apts.smoothing,n.ahead=24)
+
+
+ts.plot(exp(apts.log), exp(fore$pred), exp(U), exp(L), exp(fore2),col=c(1,2,4,4,6), lty = c(1,1,2,2,3))
+legend("topleft", c("Actual", "ARIMA", "ARIMA Error Bounds (95% Confidence)", "exponential smoothing"),col=c(1,2,4,6), lty=c(1,1,2,3))
+```
+
+
+## ARIMA 모형 진단하기 
+
+아래 그래프의 결과 아래와 같은 사실을 알 수 있다. 
+
+* 잔차가 균등하다.
+* 잔차의 자기 상관이 없다. 
+* p-value가 모두 귀무가설(자기상관이 0이다.)을 기각하지 못한다. 
+
+
+결과적으로 우리는 적절한 모델을 만들어 낸 것을 알 수 있다.
+
+
+```{r diag, fig.width=10, fig.height=8, message=FALSE, warning=FALSE}
+
+tsdiag(apts.log.arima)
+
+```
+
+
+
+
